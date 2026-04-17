@@ -8,7 +8,9 @@
     <style>
         body { font-family: sans-serif; text-align: center; background-color: #f0f4f8; padding: 20px; }
         .card { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 400px; margin: 0 auto; }
-        .my-number { font-size: 60px; font-weight: bold; color: #ff8c00; margin: 20px 0; }
+        .my-number { font-size: 60px; font-weight: bold; color: #ff8c00; margin: 10px 0; }
+        .current-box { background: #eef2ff; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
+        .current-num { font-size: 24px; font-weight: bold; color: #0070f3; }
         button { width: 100%; padding: 20px; font-size: 20px; cursor: pointer; border: none; border-radius: 12px; color: white; background-color: #0070f3; font-weight: bold; }
         .hidden { display: none; }
     </style>
@@ -16,29 +18,70 @@
 <body>
     <div class="card">
         <h1>小池病院 受付</h1>
+        
         <div id="before-register">
+            <div class="current-box">
+                <p>ただいまの呼出番号</p>
+                <div id="display-current" class="current-num">--番</div>
+            </div>
             <p>下のボタンを押して<br>受付番号を発行してください</p>
             <button onclick="getTicket()">受付する</button>
         </div>
+
         <div id="after-register" class="hidden">
-            <p>あなたの番号は</p>
+            <p>あなたの受付番号は</p>
             <div id="issued-number" class="my-number">--</div>
             <p>です。</p>
-            <p style="font-size: 14px; color: #666;">この画面を閉じずに<br>お待ちください</p>
+            <hr style="border: 1px dashed #ccc; margin: 20px 0;">
+            <div class="current-box">
+                <p>ただいまの呼出番号</p>
+                <div id="live-current" class="current-num">--番</div>
+            </div>
+            <p style="font-size: 14px; color: #666;">この画面のままお待ちください。<br>自動で更新されます。</p>
         </div>
     </div>
+
     <script>
         const SUPABASE_URL = 'https://liopumnwbwrdjzhfrlat.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_0xpjBtea0HTyp69_TpYvuA_YHqQg7cX';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // 画面の数字を更新する関数
+        async function updateLiveDisplay() {
+            const { data } = await supabaseClient.from('Koike_HP').select('*').eq('id', 1).single();
+            if (data) {
+                if(document.getElementById('display-current')) {
+                    document.getElementById('display-current').innerText = data.current_number + '番';
+                }
+                if(document.getElementById('live-current')) {
+                    document.getElementById('live-current').innerText = data.current_number + '番';
+                }
+            }
+        }
+
+        // 受付ボタンを押した時の処理
         async function getTicket() {
             const { data } = await supabaseClient.from('Koike_HP').select('total_count').eq('id', 1).single();
             const nextNumber = data.total_count + 1;
+
             await supabaseClient.from('Koike_HP').update({ total_count: nextNumber }).eq('id', 1);
+
             document.getElementById('before-register').classList.add('hidden');
             document.getElementById('after-register').classList.remove('hidden');
             document.getElementById('issued-number').innerText = nextNumber + '番';
+            
+            updateLiveDisplay();
         }
+
+        // リアルタイム更新の監視（スタッフが番号を進めたらここも変わる）
+        supabaseClient.channel('ticket-channel')
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'Koike_HP' }, () => {
+                updateLiveDisplay();
+            })
+            .subscribe();
+
+        // 最初に現在の番号を表示
+        updateLiveDisplay();
     </script>
 </body>
 </html>
