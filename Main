@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小池病院 順番待ち</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; background-color: #f0f4f8; padding: 20px; }
+        .card { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 400px; margin: 0 auto; }
+        .number { font-size: 80px; font-weight: bold; color: #0070f3; margin: 20px 0; }
+        button { padding: 15px 25px; font-size: 16px; cursor: pointer; border: none; border-radius: 8px; color: white; margin: 5px; }
+        .btn-next { background-color: #28a745; }
+        .btn-issue { background-color: #ff8c00; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>ただいまの番号</h1>
+        <div id="current-number" class="number">--</div>
+        <p id="wait-count">お待ち人数: --人</p>
+    </div>
+
+    <div style="margin-top: 50px; padding: 20px; border: 1px dashed #ccc;">
+        <p>スタッフ用操作パネル</p>
+        <button class="btn-next" onclick="nextPatient()">次の方を呼ぶ</button>
+        <button class="btn-issue" onclick="issueNumber()">新規受付</button>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://liopumnwbwrdjzhfrlat.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_0xpjBtea0HTyp69_TpYvuA_YHqQg7cX';
+        
+        // 修正点：supabase.createClient ではなく、ライブラリのグローバル変数を使用
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        async function updateDisplay() {
+            const { data, error } = await supabaseClient.from('Koike_HP').select('*').eq('id', 1).single();
+            if (error) {
+                console.error('データ取得エラー:', error);
+                return;
+            }
+            if (data) {
+                document.getElementById('current-number').innerText = data.current_number + '番';
+                document.getElementById('wait-count').innerText = 'お待ち人数: ' + (data.total_count - data.current_number) + '人';
+            }
+        }
+
+        async function nextPatient() {
+            const { data } = await supabaseClient.from('Koike_HP').select('current_number').eq('id', 1).single();
+            await supabaseClient.from('Koike_HP').update({ current_number: data.current_number + 1 }).eq('id', 1);
+        }
+
+        async function issueNumber() {
+            const { data } = await supabaseClient.from('Koike_HP').select('total_count').eq('id', 1).single();
+            await supabaseClient.from('Koike_HP').update({ total_count: data.total_count + 1 }).eq('id', 1);
+        }
+
+        // リアルタイム更新の監視
+        supabaseClient.channel('custom-all-channel')
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'Koike_HP' }, (payload) => {
+                updateDisplay();
+            })
+            .subscribe();
+
+        // 最初にデータを表示
+        updateDisplay();
+    </script>
+</body>
+</html>
